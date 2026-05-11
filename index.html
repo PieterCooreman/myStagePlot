@@ -1,0 +1,574 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>myStage - Stage Plot Builder</title>
+    <!-- Iconify for Dedicated Musical/Stage Icons -->
+    <script src="https://code.iconify.design/3/3.1.0/iconify.min.js"></script>
+    <!-- html2canvas for Image Export -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <style>
+        :root {
+            --primary: #1a1a2e;
+            --secondary: #16213e;
+            --accent: #e94560;
+            --bg: #f4f4f9;
+            --text: #333;
+            --border: #ccc;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+
+        body { display: flex; height: 100vh; background-color: var(--bg); color: var(--text); overflow: hidden; }
+
+        /* Layout */
+        #sidebar { width: 300px; background: var(--primary); color: white; display: flex; flex-direction: column; overflow-y: auto; }
+        #sidebar-header { padding: 20px; background: #0f0f1a; text-align: center; }
+        #sidebar-header h1 { font-size: 28px; letter-spacing: 2px; color: var(--accent); }
+        .category { padding: 10px 20px; font-weight: bold; background: var(--secondary); margin-top: 10px; cursor: pointer; }
+        .item-list { display: flex; flex-wrap: wrap; gap: 10px; padding: 15px; }
+        .draggable-item { background: white; color: var(--primary); width: 60px; height: 60px; display: flex; flex-direction: column; align-items: center; justify-content: center; border-radius: 8px; cursor: grab; text-align: center; font-size: 10px; padding: 5px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); transition: transform 0.2s; }
+        .draggable-item:hover { transform: scale(1.05); border: 2px solid var(--accent); }
+        .draggable-item .iconify { font-size: 28px; margin-bottom: 4px; pointer-events: none; }
+        .draggable-item span { pointer-events: none; line-height: 1.1; }
+
+        #main-content { flex: 1; display: flex; flex-direction: column; overflow-y: auto; padding: 20px; }
+        
+        /* Toolbar */
+        #toolbar { display: flex; gap: 10px; margin-bottom: 20px; background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        button { padding: 8px 16px; background: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 6px; }
+        button:hover { background: var(--secondary); }
+        button.action-btn { background: var(--accent); }
+        button.action-btn:hover { background: #d83a54; }
+        button.danger { background: #e74c3c; }
+        button.danger:hover { background: #c0392b; }
+
+        /* Printable Area (Stage + Input List) */
+        #printable-area { display: flex; flex-direction: column; gap: 20px; background: var(--bg); }
+
+        /* Stage Canvas */
+        #stage-container { background: white; border: 2px solid var(--border); border-radius: 8px; height: 600px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        .stage-grid { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background-image: linear-gradient(var(--border) 1px, transparent 1px), linear-gradient(90deg, var(--border) 1px, transparent 1px); background-size: 50px 50px; opacity: 0.2; pointer-events: none; }
+        
+        /* Items on Stage */
+        .stage-item { position: absolute; display: flex; flex-direction: column; align-items: center; cursor: move; user-select: none; transform-origin: center; }
+        .stage-item .icon-wrapper { font-size: 32px; color: var(--primary); padding: 10px; background: rgba(255,255,255,0.9); border-radius: 50%; box-shadow: 0 3px 8px rgba(0,0,0,0.3); border: 2px solid transparent; transition: border-color 0.2s; display: flex; align-items: center; justify-content: center; }
+        .stage-item.selected .icon-wrapper { border-color: var(--accent); box-shadow: 0 0 12px var(--accent); }
+        .stage-item .label { margin-top: 5px; font-size: 12px; font-weight: bold; background: rgba(255,255,255,0.95); padding: 2px 6px; border-radius: 4px; pointer-events: none; text-align: center; white-space: nowrap; border: 1px solid #eee; }
+        
+        /* Item Controls popover */
+        #item-controls { position: absolute; background: white; border: 1px solid var(--border); border-radius: 6px; padding: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.2); display: none; z-index: 9999; flex-direction: column; gap: 10px; width: 220px; }
+        #item-controls label { font-size: 12px; font-weight: bold; color: var(--text); text-transform: uppercase; letter-spacing: 0.5px; }
+        #item-controls input[type="text"], #item-controls input[type="range"] { width: 100%; padding: 6px; border: 1px solid var(--border); border-radius: 4px; }
+        .controls-row { display: flex; gap: 5px; }
+        .controls-row button { flex: 1; padding: 6px; font-size: 12px; justify-content: center; }
+
+        /* Input List */
+        #input-list-container { background: white; border-radius: 8px; padding: 20px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
+        #input-list-container h2 { margin-bottom: 15px; color: var(--primary); border-bottom: 2px solid var(--border); padding-bottom: 10px; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { border: 1px solid var(--border); padding: 12px; text-align: left; }
+        th { background: var(--bg); color: var(--primary); }
+        input.note-input { width: 100%; padding: 8px; border: 1px solid var(--border); border-radius: 4px; }
+        input.note-input:focus { outline: none; border-color: var(--accent); }
+        
+        #json-upload { display: none; }
+    </style>
+</head>
+<body>
+
+    <!-- Sidebar: Library -->
+    <div id="sidebar">
+        <div id="sidebar-header">
+            <h1>myStage</h1>
+            <p style="font-size: 13px; opacity: 0.8; margin-top: 5px;">Stage Plot Builder</p>
+        </div>
+        <div id="inventory"></div>
+    </div>
+
+    <!-- Main Workspace -->
+    <div id="main-content">
+        <div id="toolbar">
+            <button class="action-btn" onclick="downloadImage()"><span class="iconify" data-icon="mdi:camera"></span> Download Plot (Image)</button>
+            <button onclick="exportJSON()"><span class="iconify" data-icon="mdi:download"></span> Save Data (JSON)</button>
+            <button onclick="document.getElementById('json-upload').click()"><span class="iconify" data-icon="mdi:upload"></span> Load Data</button>
+            <input type="file" id="json-upload" accept=".json" onchange="importJSON(event)">
+            <button class="danger" onclick="clearStage()" style="margin-left: auto;"><span class="iconify" data-icon="mdi:trash-can"></span> Clear Stage</button>
+        </div>
+
+        <div id="printable-area">
+            <!-- Stage Area -->
+            <div id="stage-container">
+                <div class="stage-grid"></div>
+                <!-- Dynamic stage items injected here -->
+            </div>
+
+            <!-- Input List -->
+            <div id="input-list-container">
+                <h2>Input List</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th style="width: 60px;">CH</th>
+                            <th style="width: 200px;">Input / Instrument</th>
+                            <th style="width: 200px;">Label</th>
+                            <th>Notes / Requirements</th>
+                        </tr>
+                    </thead>
+                    <tbody id="input-list-body">
+                        <!-- Dynamic list items injected here -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contextual Controls for Selected Item -->
+    <div id="item-controls">
+        <div>
+            <label>Label</label>
+            <input type="text" id="ctrl-label" placeholder="e.g. Lead Vox">
+        </div>
+        <div>
+            <label>Rotation</label>
+            <input type="range" id="ctrl-rotation" min="0" max="360" value="0">
+        </div>
+        <div class="controls-row">
+            <button onclick="duplicateSelectedItem()"><span class="iconify" data-icon="mdi:content-copy"></span> Copy</button>
+            <button class="danger" onclick="deleteSelectedItem()"><span class="iconify" data-icon="mdi:trash-can"></span> Delete</button>
+        </div>
+    </div>
+
+    <script>
+        // --- 1. INVENTORY DEFINITION (Using Iconify MDI) ---
+       const inventoryCategories = {
+            "Vocals": [
+                { type: "Lead Vocal", icon: "mdi:microphone-variant" },
+                { type: "Backing Vocal", icon: "mdi:microphone-outline" },
+            ],
+            "Drums & Percussion": [
+                // Updated to use FontAwesome 6 for a reliable Drum icon
+                { type: "Drum Kit", icon: "fa6-solid:drum" }, 
+                { type: "Elec Pad", icon: "mdi:midi-port" },
+                { type: "Congas", icon: "mdi:hand-clap" },
+            ],
+            "Guitars & Strings": [
+                { type: "Electric Guitar", icon: "mdi:guitar-electric" },
+                { type: "Acoustic Guitar", icon: "mdi:guitar-acoustic" },
+                { type: "Bass Guitar", icon: "mdi:guitar-pick" }, 
+                { type: "Violin", icon: "mdi:violin" },
+            ],
+            "Keyboards & DJ": [
+                { type: "Grand Piano", icon: "mdi:piano" }, 
+                { type: "Synth/Key", icon: "mdi:keyboard-outline" },
+                { type: "DJ Setup", icon: "mdi:record-player" },
+                { type: "Laptop Rig", icon: "mdi:laptop" },
+            ],
+            "Horns & Woodwinds": [
+                { type: "Saxophone", icon: "mdi:saxophone" },
+                { type: "Trumpet", icon: "mdi:trumpet" }
+            ],
+            "Audio & Monitors": [
+                { type: "Floor Monitor", icon: "mdi:speaker" },
+                { type: "Guitar Amp", icon: "mdi:amplifier" },
+                { type: "Bass Rig", icon: "mdi:speaker-wireless" },
+                { type: "DI Box", icon: "mdi:box-outline" },
+                // Updated to use Phosphor Icons for a proper Stage Mic Stand
+                { type: "Mic Stand", icon: "ph:microphone-stage-fill" },
+            ],
+            "Stage Setup": [
+                { type: "Power Drop", icon: "mdi:power-plug" },
+                { type: "Stage Riser", icon: "mdi:layers-outline" }
+            ],
+            "Custom": [
+                { type: "Text/Note", icon: "mdi:format-text" }
+            ]
+        };
+
+        // --- 2. STATE MANAGEMENT ---
+        let stageItems = []; 
+        let selectedItemId = null;
+        let zIndexCounter = 10;
+        let isDraggingOnStage = false;
+        let dragOffset = { x: 0, y: 0 };
+
+        const stage = document.getElementById('stage-container');
+        const controls = document.getElementById('item-controls');
+        const ctrlLabel = document.getElementById('ctrl-label');
+        const ctrlRotation = document.getElementById('ctrl-rotation');
+
+        // --- 3. INITIALIZATION ---
+        function init() {
+            buildSidebar();
+            loadState();
+            setupDragAndDrop();
+            setupControlListeners();
+            
+            stage.addEventListener('mousedown', (e) => {
+                if (e.target === stage || e.target.classList.contains('stage-grid')) {
+                    deselectAll();
+                }
+            });
+        }
+
+        // Build Sidebar UI
+        function buildSidebar() {
+            const inventoryDiv = document.getElementById('inventory');
+            for (const [category, items] of Object.entries(inventoryCategories)) {
+                const catHeader = document.createElement('div');
+                catHeader.className = 'category';
+                catHeader.innerText = category;
+                inventoryDiv.appendChild(catHeader);
+
+                const listDiv = document.createElement('div');
+                listDiv.className = 'item-list';
+
+                items.forEach(item => {
+                    const el = document.createElement('div');
+                    el.className = 'draggable-item';
+                    el.draggable = true;
+                    el.dataset.type = item.type;
+                    el.dataset.icon = item.icon;
+                    el.innerHTML = `<span class="iconify" data-icon="${item.icon}"></span><span>${item.type}</span>`;
+                    
+                    el.addEventListener('dragstart', (e) => {
+                        e.dataTransfer.setData('text/plain', JSON.stringify(item));
+                    });
+                    
+                    listDiv.appendChild(el);
+                });
+                inventoryDiv.appendChild(listDiv);
+            }
+        }
+
+        // --- 4. DRAG AND DROP (SIDEBAR TO STAGE) ---
+        function setupDragAndDrop() {
+            stage.addEventListener('dragover', (e) => {
+                e.preventDefault(); 
+            });
+
+            stage.addEventListener('drop', (e) => {
+                e.preventDefault();
+                const data = e.dataTransfer.getData('text/plain');
+                if (data) {
+                    const itemData = JSON.parse(data);
+                    const rect = stage.getBoundingClientRect();
+                    const x = e.clientX - rect.left - 30; 
+                    const y = e.clientY - rect.top - 30;
+                    
+                    addItemToStage(itemData.type, itemData.icon, x, y);
+                }
+            });
+        }
+
+        // --- 5. STAGE ITEM MANAGEMENT ---
+        function addItemToStage(type, icon, x, y, label = "", rotation = 0, zIndex = ++zIndexCounter, note = "", id = null) {
+            const newItem = {
+                id: id || 'item_' + Date.now() + Math.floor(Math.random() * 1000),
+                type: type,
+                icon: icon,
+                x: Math.max(0, x),
+                y: Math.max(0, y),
+                label: label || type,
+                rotation: rotation,
+                zIndex: zIndex,
+                note: note
+            };
+            stageItems.push(newItem);
+            renderStage();
+            saveState();
+            selectItem(newItem.id);
+        }
+
+        function renderStage() {
+            const existingElements = stage.querySelectorAll('.stage-item');
+            existingElements.forEach(el => el.remove());
+
+            stageItems.forEach(item => {
+                const el = document.createElement('div');
+                el.className = 'stage-item';
+                el.id = item.id;
+                el.style.left = item.x + 'px';
+                el.style.top = item.y + 'px';
+                el.style.zIndex = item.zIndex;
+                
+                const rotationStyle = `transform: rotate(${item.rotation}deg);`;
+
+                el.innerHTML = `
+                    <div class="icon-wrapper" style="${rotationStyle}">
+                        <span class="iconify" data-icon="${item.icon}"></span>
+                    </div>
+                    <div class="label">${item.label}</div>
+                `;
+
+                if (item.id === selectedItemId) {
+                    el.classList.add('selected');
+                }
+
+                el.addEventListener('mousedown', (e) => startDragItem(e, item.id));
+                stage.appendChild(el);
+            });
+
+            renderInputList();
+            positionControls(); 
+            
+            // Re-render iconify icons injected dynamically
+            if(window.Iconify) { Iconify.scan(stage); }
+        }
+
+        // --- 6. MOVING ITEMS ON STAGE ---
+        function startDragItem(e, id) {
+            e.stopPropagation(); 
+            selectItem(id);
+            isDraggingOnStage = true;
+            
+            const item = stageItems.find(i => i.id === id);
+            item.zIndex = ++zIndexCounter; 
+
+            const el = document.getElementById(id);
+            dragOffset.x = e.clientX - el.getBoundingClientRect().left;
+            dragOffset.y = e.clientY - el.getBoundingClientRect().top;
+
+            document.addEventListener('mousemove', dragItem);
+            document.addEventListener('mouseup', endDragItem);
+        }
+
+        function dragItem(e) {
+            if (!isDraggingOnStage) return;
+            const item = stageItems.find(i => i.id === selectedItemId);
+            if (!item) return;
+
+            const rect = stage.getBoundingClientRect();
+            let newX = e.clientX - rect.left - dragOffset.x;
+            let newY = e.clientY - rect.top - dragOffset.y;
+
+            newX = Math.max(0, Math.min(newX, stage.offsetWidth - 60)); 
+            newY = Math.max(0, Math.min(newY, stage.offsetHeight - 60));
+
+            item.x = newX;
+            item.y = newY;
+            
+            const el = document.getElementById(selectedItemId);
+            el.style.left = item.x + 'px';
+            el.style.top = item.y + 'px';
+            positionControls();
+        }
+
+        function endDragItem() {
+            if (isDraggingOnStage) {
+                isDraggingOnStage = false;
+                saveState();
+                document.removeEventListener('mousemove', dragItem);
+                document.removeEventListener('mouseup', endDragItem);
+            }
+        }
+
+        // --- 7. ITEM SELECTION & CONTROLS ---
+        function selectItem(id) {
+            selectedItemId = id;
+            const item = stageItems.find(i => i.id === id);
+            
+            ctrlLabel.value = item.label;
+            ctrlRotation.value = item.rotation;
+            
+            controls.style.display = 'flex';
+            renderStage(); 
+        }
+
+        function deselectAll() {
+            selectedItemId = null;
+            controls.style.display = 'none';
+            renderStage();
+        }
+
+        function positionControls() {
+            if (!selectedItemId) return;
+            const item = stageItems.find(i => i.id === selectedItemId);
+            if (!item) return;
+            
+            const rect = stage.getBoundingClientRect();
+            let leftPos = item.x + rect.left + 80;
+            if (leftPos + 220 > window.innerWidth) leftPos = item.x + rect.left - 230;
+            
+            controls.style.left = leftPos + 'px';
+            controls.style.top = (item.y + rect.top) + 'px';
+        }
+
+        function setupControlListeners() {
+            ctrlLabel.addEventListener('input', (e) => {
+                if (selectedItemId) {
+                    const item = stageItems.find(i => i.id === selectedItemId);
+                    item.label = e.target.value;
+                    renderStage();
+                    saveState();
+                }
+            });
+
+            ctrlRotation.addEventListener('input', (e) => {
+                if (selectedItemId) {
+                    const item = stageItems.find(i => i.id === selectedItemId);
+                    item.rotation = e.target.value;
+                    renderStage();
+                    saveState();
+                }
+            });
+            
+            window.addEventListener('scroll', positionControls);
+            window.addEventListener('resize', positionControls);
+        }
+
+        function deleteSelectedItem() {
+            if (!selectedItemId) return;
+            stageItems = stageItems.filter(i => i.id !== selectedItemId);
+            deselectAll();
+            saveState();
+        }
+
+        function duplicateSelectedItem() {
+            if (!selectedItemId) return;
+            const item = stageItems.find(i => i.id === selectedItemId);
+            addItemToStage(item.type, item.icon, item.x + 20, item.y + 20, item.label, item.rotation, ++zIndexCounter, item.note);
+        }
+
+        function clearStage() {
+            if(confirm("Are you sure you want to clear the entire stage?")) {
+                stageItems = [];
+                deselectAll();
+                saveState();
+            }
+        }
+
+        // --- 8. INPUT LIST GENERATION ---
+        function renderInputList() {
+            const tbody = document.getElementById('input-list-body');
+            tbody.innerHTML = '';
+            
+            const filterOut = ["Stage Riser", "Text/Note"];
+            const listableItems = stageItems.filter(item => !filterOut.includes(item.type));
+
+            listableItems.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                
+                tr.innerHTML = `
+                    <td><strong>${index + 1}</strong></td>
+                    <td style="display: flex; align-items: center; gap: 8px; border: none;">
+                        <span class="iconify" data-icon="${item.icon}" style="color:var(--accent); font-size: 20px;"></span>
+                        ${item.type}
+                    </td>
+                    <td>${item.label}</td>
+                    <td>
+                        <input type="text" class="note-input" value="${item.note}" data-id="${item.id}" placeholder="e.g. 48v Phantom Power, SM58">
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.querySelectorAll('.note-input').forEach(input => {
+                input.addEventListener('change', (e) => {
+                    const id = e.target.getAttribute('data-id');
+                    const item = stageItems.find(i => i.id === id);
+                    if (item) {
+                        item.note = e.target.value;
+                        saveState();
+                    }
+                });
+            });
+
+            if(window.Iconify) { Iconify.scan(tbody); }
+        }
+
+        // --- 9. DATA PERSISTENCE (LocalStorage) ---
+        function saveState() {
+            localStorage.setItem('mystage_state', JSON.stringify({
+                items: stageItems,
+                zCounter: zIndexCounter
+            }));
+        }
+
+        function loadState() {
+            const saved = localStorage.getItem('mystage_state');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                stageItems = parsed.items || [];
+                zIndexCounter = parsed.zCounter || 10;
+                renderStage();
+            }
+        }
+
+        // --- 10. EXPORT / IMPORT JSON ---
+        function exportJSON() {
+            const dataStr = JSON.stringify(stageItems, null, 2);
+            const blob = new Blob([dataStr], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "myStage_Plot.json";
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function importJSON(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const parsed = JSON.parse(e.target.result);
+                    if (Array.isArray(parsed)) {
+                        stageItems = parsed;
+                        zIndexCounter = Math.max(...stageItems.map(i => i.zIndex || 0), 10);
+                        deselectAll();
+                        saveState();
+                    } else {
+                        alert("Invalid file format.");
+                    }
+                } catch (err) {
+                    alert("Error reading JSON file.");
+                }
+            };
+            reader.readAsText(file);
+            event.target.value = "";
+        }
+
+        // --- 11. IMAGE EXPORT (html2canvas) ---
+        function downloadImage() {
+            deselectAll(); 
+            
+            const targetElement = document.getElementById('printable-area');
+            const originalBg = targetElement.style.background;
+            targetElement.style.background = "#ffffff"; 
+
+            // Allow time for Iconify SVGs to render fully before capturing
+            setTimeout(() => {
+                html2canvas(targetElement, {
+                    scale: 2, 
+                    useCORS: true,
+                    backgroundColor: "#ffffff"
+                }).then(canvas => {
+                    targetElement.style.background = originalBg; 
+
+                    const imageURI = canvas.toDataURL("image/png");
+                    const a = document.createElement("a");
+                    a.href = imageURI;
+                    a.download = "myStage_Plot_and_InputList.png";
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                }).catch(err => {
+                    targetElement.style.background = originalBg;
+                    console.error("Error capturing image:", err);
+                    alert("Failed to capture image. Check console for details.");
+                });
+            }, 300);
+        }
+
+        // Run application
+        init();
+    </script>
+</body>
+</html>
