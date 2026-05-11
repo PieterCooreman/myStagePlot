@@ -1,4 +1,4 @@
-# myStage - Stage Plot Builder
+# myStagePlot - Stage Plot Builder
 
 myStagePlot is a lightweight, single-page web application designed for musicians, bands, and sound engineers to quickly create, manage, and export professional stage plots and input lists. 
 
@@ -24,7 +24,7 @@ Built entirely with pure HTML, CSS, and vanilla JavaScript, it runs completely i
 
 ## 💻 Installation & Usage
 
-Because myStage is a vanilla frontend application, there is no complex build process or installation required.
+Because myStagePlot is a vanilla frontend application, there is no complex build process or installation required.
 
 1. Clone the repository:
    ```bash
