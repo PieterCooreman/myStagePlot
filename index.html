@@ -45,7 +45,12 @@
         button.danger:hover { background: #c0392b; }
 
         /* Printable Area (Stage + Input List) */
-        #printable-area { display: flex; flex-direction: column; gap: 20px; background: var(--bg); }
+        #printable-area { display: flex; flex-direction: column; gap: 15px; background: var(--bg); padding-bottom: 20px; }
+
+        /* Title Input */
+        #plot-header { text-align: center; padding: 10px; }
+        #stage-title { font-size: 32px; font-weight: bold; color: var(--primary); border: none; background: transparent; text-align: center; width: 100%; text-transform: uppercase; letter-spacing: 1px; }
+        #stage-title:focus { outline: none; border-bottom: 2px dashed var(--accent); }
 
         /* Stage Canvas */
         #stage-container { background: white; border: 2px solid var(--border); border-radius: 8px; height: 600px; position: relative; overflow: hidden; box-shadow: 0 4px 10px rgba(0,0,0,0.1); }
@@ -98,6 +103,12 @@
         </div>
 
         <div id="printable-area">
+            
+            <!-- Plot Title -->
+            <div id="plot-header">
+                <input type="text" id="stage-title" value="My Stage Plot" placeholder="Enter Stage Plot Title">
+            </div>
+
             <!-- Stage Area -->
             <div id="stage-container">
                 <div class="stage-grid"></div>
@@ -141,14 +152,13 @@
     </div>
 
     <script>
-        // --- 1. INVENTORY DEFINITION (Using Iconify MDI) ---
-       const inventoryCategories = {
+        // --- 1. INVENTORY DEFINITION ---
+        const inventoryCategories = {
             "Vocals": [
                 { type: "Lead Vocal", icon: "mdi:microphone-variant" },
                 { type: "Backing Vocal", icon: "mdi:microphone-outline" },
             ],
             "Drums & Percussion": [
-                // Updated to use FontAwesome 6 for a reliable Drum icon
                 { type: "Drum Kit", icon: "fa6-solid:drum" }, 
                 { type: "Elec Pad", icon: "mdi:midi-port" },
                 { type: "Congas", icon: "mdi:hand-clap" },
@@ -174,7 +184,6 @@
                 { type: "Guitar Amp", icon: "mdi:amplifier" },
                 { type: "Bass Rig", icon: "mdi:speaker-wireless" },
                 { type: "DI Box", icon: "mdi:box-outline" },
-                // Updated to use Phosphor Icons for a proper Stage Mic Stand
                 { type: "Mic Stand", icon: "ph:microphone-stage-fill" },
             ],
             "Stage Setup": [
@@ -187,6 +196,7 @@
         };
 
         // --- 2. STATE MANAGEMENT ---
+        let stageTitle = "My Stage Plot";
         let stageItems = []; 
         let selectedItemId = null;
         let zIndexCounter = 10;
@@ -197,6 +207,7 @@
         const controls = document.getElementById('item-controls');
         const ctrlLabel = document.getElementById('ctrl-label');
         const ctrlRotation = document.getElementById('ctrl-rotation');
+        const titleInput = document.getElementById('stage-title');
 
         // --- 3. INITIALIZATION ---
         function init() {
@@ -209,6 +220,11 @@
                 if (e.target === stage || e.target.classList.contains('stage-grid')) {
                     deselectAll();
                 }
+            });
+
+            titleInput.addEventListener('input', (e) => {
+                stageTitle = e.target.value;
+                saveState();
             });
         }
 
@@ -313,7 +329,6 @@
             renderInputList();
             positionControls(); 
             
-            // Re-render iconify icons injected dynamically
             if(window.Iconify) { Iconify.scan(stage); }
         }
 
@@ -481,6 +496,7 @@
         // --- 9. DATA PERSISTENCE (LocalStorage) ---
         function saveState() {
             localStorage.setItem('mystage_state', JSON.stringify({
+                title: stageTitle,
                 items: stageItems,
                 zCounter: zIndexCounter
             }));
@@ -490,21 +506,38 @@
             const saved = localStorage.getItem('mystage_state');
             if (saved) {
                 const parsed = JSON.parse(saved);
-                stageItems = parsed.items || [];
-                zIndexCounter = parsed.zCounter || 10;
+                
+                // Handle backwards compatibility if old save format was just an array
+                if (Array.isArray(parsed)) {
+                    stageItems = parsed;
+                } else {
+                    stageItems = parsed.items || [];
+                    stageTitle = parsed.title || "My Stage Plot";
+                    zIndexCounter = parsed.zCounter || 10;
+                }
+                
+                titleInput.value = stageTitle;
                 renderStage();
             }
         }
 
         // --- 10. EXPORT / IMPORT JSON ---
+        function formatFilename(str) {
+            return str.replace(/[^a-z0-9]/gi, '_').toLowerCase();
+        }
+
         function exportJSON() {
-            const dataStr = JSON.stringify(stageItems, null, 2);
+            const exportData = {
+                title: stageTitle,
+                items: stageItems
+            };
+            const dataStr = JSON.stringify(exportData, null, 2);
             const blob = new Blob([dataStr], { type: "application/json" });
             const url = URL.createObjectURL(blob);
             
             const a = document.createElement('a');
             a.href = url;
-            a.download = "myStage_Plot.json";
+            a.download = `${formatFilename(stageTitle)}_plot.json`;
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
@@ -519,14 +552,25 @@
             reader.onload = function(e) {
                 try {
                     const parsed = JSON.parse(e.target.result);
+                    
+                    // Support old array format imports
                     if (Array.isArray(parsed)) {
                         stageItems = parsed;
-                        zIndexCounter = Math.max(...stageItems.map(i => i.zIndex || 0), 10);
-                        deselectAll();
-                        saveState();
+                        stageTitle = "Imported Stage Plot";
+                    } 
+                    // Support new object format imports
+                    else if (parsed.items && Array.isArray(parsed.items)) {
+                        stageItems = parsed.items;
+                        stageTitle = parsed.title || "Imported Stage Plot";
                     } else {
                         alert("Invalid file format.");
+                        return;
                     }
+
+                    titleInput.value = stageTitle;
+                    zIndexCounter = Math.max(...stageItems.map(i => i.zIndex || 0), 10);
+                    deselectAll();
+                    saveState();
                 } catch (err) {
                     alert("Error reading JSON file.");
                 }
@@ -543,7 +587,9 @@
             const originalBg = targetElement.style.background;
             targetElement.style.background = "#ffffff"; 
 
-            // Allow time for Iconify SVGs to render fully before capturing
+            // Give borderless input a transparent background for pure text look
+            titleInput.style.background = "transparent";
+
             setTimeout(() => {
                 html2canvas(targetElement, {
                     scale: 2, 
@@ -555,7 +601,7 @@
                     const imageURI = canvas.toDataURL("image/png");
                     const a = document.createElement("a");
                     a.href = imageURI;
-                    a.download = "myStage_Plot_and_InputList.png";
+                    a.download = `${formatFilename(stageTitle)}_plot.png`;
                     document.body.appendChild(a);
                     a.click();
                     document.body.removeChild(a);
