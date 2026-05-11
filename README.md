@@ -4,6 +4,8 @@ myStage is a lightweight, single-page web application designed for musicians, ba
 
 Built entirely with pure HTML, CSS, and vanilla JavaScript, it runs completely in the browser without the need for a backend or database.
 
+**Live demo:** https://pietercooreman.github.io/myStagePlot/
+
 ## 🚀 Features
 
 * **Drag-and-Drop Interface:** Easily place instruments, amps, monitors, and stage setups onto a customizable stage canvas.
